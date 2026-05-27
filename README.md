@@ -1,4 +1,37 @@
-# 🎙️ NovaVoice: Full-Stack Gemini Live API WebSocket Calendar Assistant
+# 🎙️ NovaVoice AI — Production-Grade Gemini Live API Voice Agent Platform
+
+> Ultra-low latency, real-time conversational AI voice platform powered by Gemini Live API, FastAPI, WebSockets, and modular voice infrastructure.
+
+---
+
+# 🚀 Step 0 — Clone the Repository
+
+First, clone the repository locally:
+
+```bash
+git clone https://github.com/coder-irwin/voice_ai_agents_using-Gemini_live_api.git
+```
+
+Move into the project directory:
+```bash
+cd voice_ai_agents_using-Gemini_live_api
+```
+
+# 📦 Step 1 — Create Virtual Environment
+
+### Windows
+```cmd
+python -m venv venv
+venv\Scripts\activate
+```
+
+### macOS / Linux
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+---
 
 NovaVoice is an ultra-low latency, bidirectional streaming voice assistant that integrates the **Gemini Live API** (`BidiGenerateContent` WebSocket protocol) with **Google Calendar** for automated schedule checking and meeting booking.
 

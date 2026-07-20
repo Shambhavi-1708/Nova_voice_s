@@ -1,561 +1,874 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NovaVoice - AI Assistant</title>
-    <style>
-        :root {
-            --bg-color: #0f172a;
-            --surface: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #3b82f6;
-            --danger: #ef4444;
-            --success: #10b981;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovaVoice - AI Assistant</title>
+<style>
+:root {
+  --bg: #08090b;
+  --panel: #111214;
+  --panel-alt: #17181b;
+  --border: #24262b;
+  --text-main: #f5f5f7;
+  --text-muted: #8b8d94;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --theme-primary: #fbbf24;
+  --theme-secondary: #f59e0b;
+  --theme-glow: rgba(251, 191, 36, 0.45);
+  --blob-1: #fbbf24;
+  --blob-2: #f97316;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+body { min-height: 100vh; overflow-x: hidden; }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }
+/* ===== Ambient morphing background ===== */
+.ambient-bg {
+  position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+}
+.blob {
+  position: absolute;
+  width: 45vw; height: 45vw;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.32;
+  transition: background 1s ease;
+  animation: blobFloat 20s ease-in-out infinite;
+}
+.blob-1 { background: var(--blob-1); top: -10%; left: -12%; }
+.blob-2 { background: var(--blob-2); bottom: -18%; right: -12%; animation-delay: -7s; }
+.blob-3 { background: var(--theme-primary); top: 28%; right: 15%; width: 28vw; height: 28vw; opacity: 0.18; animation-delay: -13s; transition: background 1s ease; }
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  33% { transform: translate(3%, 5%) scale(1.08); }
+  66% { transform: translate(-4%, -3%) scale(0.95); }
+}
 
-        .status-badge {
-            position: absolute;
-            top: 2rem;
-            background: var(--surface);
-            padding: 0.5rem 1rem;
-            border-radius: 999px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            border: 1px solid #334155;
-        }
+/* ===== Setup modal ===== */
+.setup-modal {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(4, 5, 6, 0.92);
+  backdrop-filter: blur(8px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem;
+}
+.setup-modal.hidden { display: none; }
+.setup-modal h2 { font-size: 1.4rem; margin: 0 0 0.5rem; letter-spacing: 0.01em; }
+.api-input {
+  padding: 0.9rem 1rem; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--text-main); width: 300px; outline: none; font-size: 0.9rem;
+  transition: border-color 0.2s;
+}
+.api-input:focus { border-color: var(--theme-primary); }
+.btn-start {
+  padding: 0.9rem 1.8rem; border-radius: 10px;
+  background: var(--theme-primary); color: #08090b;
+  border: none; font-weight: 700; cursor: pointer; font-size: 0.95rem;
+  box-shadow: 0 0 20px var(--theme-glow);
+  transition: transform 0.15s;
+}
+.btn-start:hover { transform: translateY(-1px); }
 
-        .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--text-muted);
-        }
+/* ===== Split-screen shell ===== */
+.app-shell {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  min-height: 100vh;
+}
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+}
 
-        .dot.live {
-            background: var(--success);
-            box-shadow: 0 0 10px var(--success);
-        }
+.left-panel {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 2.25rem 1.5rem 2.5rem;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+}
+.brand {
+  font-weight: 700; letter-spacing: 0.04em; font-size: 1.05rem;
+  margin-bottom: 1.75rem; opacity: 0.92;
+}
+.brand::before { content: '✦ '; color: var(--theme-primary); }
 
-        .dot.speaking {
-            background: var(--accent);
-            box-shadow: 0 0 10px var(--accent);
-        }
+/* ===== Personality tabs ===== */
+.personality-tabs {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;
+  margin-bottom: 1.75rem;
+}
+.tab-btn {
+  display: flex; align-items: center; gap: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.tab-btn:hover { color: var(--text-main); border-color: var(--theme-primary); }
+.tab-btn.active {
+  color: #08090b;
+  background: var(--theme-primary);
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 18px var(--theme-glow);
+  font-weight: 600;
+}
 
-        .orb-container {
-            position: relative;
-            width: 150px;
-            height: 150px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 2rem;
-        }
+/* ===== Radial visualizer ===== */
+.visualizer-wrap {
+  position: relative;
+  width: min(320px, 78vw);
+  height: min(320px, 78vw);
+  margin: 0.5rem 0 2.25rem;
+}
+#visualizerCanvas { width: 100%; height: 100%; display: block; }
+.state-overlay {
+  position: absolute; bottom: -0.6rem; left: 50%; transform: translateX(-50%);
+}
+.status-pill {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.dot.live { background: var(--success); box-shadow: 0 0 10px var(--success); }
+.dot.speaking { background: var(--theme-primary); box-shadow: 0 0 12px var(--theme-glow); }
 
-        .call-button {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            border: none;
-            background: var(--surface);
-            color: var(--text-main);
-            font-size: 2rem;
-            cursor: pointer;
-            z-index: 10;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            transition: background 0.3s;
-        }
+/* ===== Call button ===== */
+.call-button {
+  width: 80px; height: 80px; border-radius: 50%;
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-size: 1.7rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  transition: all 0.25s ease;
+}
+.call-button:hover { border-color: var(--theme-primary); box-shadow: 0 0 25px var(--theme-glow); }
+.call-button.active {
+  background: var(--danger); color: white; border-color: var(--danger);
+  box-shadow: 0 0 25px rgba(239,68,68,0.5);
+}
 
-        /* The visualizer will dynamically inject scale values here */
-        .call-button.active {
-            background: var(--danger);
-            color: white;
-            transform: scale(var(--mic-scale, 1));
-        }
+/* ===== Right panel: conversation feed ===== */
+.right-panel {
+  display: flex; flex-direction: column;
+  padding: 2.25rem 1.75rem;
+  min-height: 0;
+  max-height: 100vh;
+}
+.feed-header {
+  font-weight: 700; letter-spacing: 0.08em;
+  color: var(--text-muted); margin-bottom: 1rem;
+  text-transform: uppercase; font-size: 0.72rem;
+}
+.transcript-container {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.65rem;
+  padding-right: 0.4rem;
+}
+.transcript-container::-webkit-scrollbar { width: 6px; }
+.transcript-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-        .ring {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            border: 2px solid var(--accent);
-            opacity: 0;
-            pointer-events: none;
-            transform: scale(var(--ai-scale, 1));
-            transition: transform 0.05s ease-out, opacity 0.1s;
-        }
+.message {
+  position: relative;
+  font-size: 0.9rem; line-height: 1.5;
+  padding: 0.7rem 3.2rem 0.7rem 0.95rem;
+  border-radius: 12px;
+  max-width: 84%; width: fit-content;
+  word-wrap: break-word;
+}
+.msg-time {
+  position: absolute; bottom: 0.42rem; right: 0.7rem;
+  font-size: 0.62rem; color: rgba(255,255,255,0.32);
+  white-space: nowrap;
+}
+.user-msg {
+  background: var(--panel-alt); align-self: flex-end; color: var(--text-main);
+  border-bottom-right-radius: 4px; border: 1px solid var(--border);
+}
+.ai-msg {
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 30%, transparent);
+  align-self: flex-start; color: var(--theme-primary); border-bottom-left-radius: 4px;
+}
+.system-msg {
+  align-self: center; font-size: 0.75rem; color: var(--text-muted); font-style: italic;
+  padding: 0.3rem 0.95rem; max-width: 92%;
+  display: flex; align-items: baseline; gap: 0.5rem;
+}
+.system-msg .msg-time { position: static; }
+.tool-card {
+  align-self: center;
+  background: rgba(34,197,94,0.08);
+  border: 1px dashed var(--success);
+  color: #4ade80;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  padding: 0.7rem 3.2rem 0.7rem 0.9rem;
+  width: 90%; box-sizing: border-box;
+}
+.tool-text { margin: 0; white-space: pre-wrap; }
 
-        .speaking-mode .ring {
-            opacity: 0.8;
-        }
-
-        .transcript-container {
-            width: 90%;
-            max-width: 500px;
-            height: 300px;
-            background: var(--surface);
-            border-radius: 16px;
-            padding: 1rem;
-            overflow-y: auto;
-            border: 1px solid #334155;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .message {
-            font-size: 0.95rem;
-            line-height: 1.5;
-            padding: 0.75rem 1rem;
-            border-radius: 12px;
-            max-width: 80%;
-            width: fit-content;
-            word-wrap: break-word;
-        }
-
-        .user-msg {
-            background: #334155;
-            align-self: flex-end;
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .ai-msg {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            align-self: flex-start;
-            color: #60a5fa;
-            border-bottom-left-radius: 4px;
-        }
-
-        .system-msg {
-            align-self: center;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            font-style: italic;
-        }
-
-        .tool-card {
-            align-self: center;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px dashed var(--success);
-            color: #34d399;
-            font-family: monospace;
-            font-size: 0.85rem;
-            border-radius: 8px;
-            padding: 0.75rem 1rem;
-            width: 90%;
-            box-sizing: border-box;
-            white-space: pre-wrap;
-        }
-
-        .setup-modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.95);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-        }
-
-        .setup-modal.hidden {
-            display: none;
-        }
-
-        .api-input {
-            padding: 1rem;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: white;
-            width: 300px;
-            margin-bottom: 1rem;
-        }
-
-        .btn-start {
-            padding: 1rem 2rem;
-            border-radius: 8px;
-            background: var(--success);
-            color: white;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-        }
-    </style>
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.msg-in { animation: fadeSlideIn 0.35s ease; }
+</style>
 </head>
-
 <body>
 
-    <div id="setupModal" class="setup-modal">
-        <h2>Welcome to NovaVoice</h2>
-        <input type="password" id="apiKey" class="api-input" placeholder="Enter Gemini API Key (AIza...)">
-        <button id="startSessionBtn" class="btn-start">Connect to Agent</button>
+<div class="ambient-bg" id="ambientBg">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<div id="setupModal" class="setup-modal">
+  <h2>Welcome to NovaVoice</h2>
+  <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: -0.5rem; margin-bottom: 0.5rem;">Your AI voice assistant — tap below to begin.</p>
+  <button id="startSessionBtn" class="btn-start">Enter NovaVoice</button>
+</div>
+
+<div class="app-shell">
+  <div class="left-panel">
+    <div class="brand">NovaVoice</div>
+
+    <div class="personality-tabs" id="personalityTabs"></div>
+
+    <div class="visualizer-wrap">
+      <canvas id="visualizerCanvas"></canvas>
+      <div class="state-overlay">
+        <div class="status-pill" id="statusBadge">
+          <div class="dot" id="statusDot"></div>
+          <span id="statusText">Disconnected</span>
+        </div>
+      </div>
     </div>
 
-    <div class="status-badge" id="statusBadge">
-        <div class="dot" id="statusDot"></div>
-        <span id="statusText">Disconnected</span>
-    </div>
+    <button class="call-button" id="callBtn">🎙️</button>
+  </div>
 
-    <div class="orb-container" id="orbContainer">
-        <div class="ring"></div>
-        <button class="call-button" id="callBtn">🎙️</button>
-    </div>
-
+  <div class="right-panel">
+    <div class="feed-header">Conversation</div>
     <div class="transcript-container" id="transcript">
-        <div class="message system-msg">Waiting to connect...</div>
+      <div class="message system-msg msg-in"><span class="msg-text">Waiting to connect...</span></div>
     </div>
+  </div>
+</div>
 
-    <script>
-        const UI = {
-            setupModal: document.getElementById('setupModal'),
-            startBtn: document.getElementById('startSessionBtn'),
-            apiKeyInput: document.getElementById('apiKey'),
-            callBtn: document.getElementById('callBtn'),
-            statusText: document.getElementById('statusText'),
-            statusDot: document.getElementById('statusDot'),
-            transcript: document.getElementById('transcript'),
-            orbContainer: document.getElementById('orbContainer')
-        };
+<script>
+const UI = {
+  setupModal: document.getElementById('setupModal'),
+  startBtn: document.getElementById('startSessionBtn'),
+  callBtn: document.getElementById('callBtn'),
+  statusText: document.getElementById('statusText'),
+  statusDot: document.getElementById('statusDot'),
+  transcript: document.getElementById('transcript'),
+  personalityTabs: document.getElementById('personalityTabs')
+};
 
-        let isCallActive = false;
-        let ws = null;
-        let audioContext = null;
-        let mediaStream = null;
-        let scriptProcessor = null;
-        let nextPlayTime = 0;
+let isCallActive = false;
+let ws = null;
+let audioContext = null;
+let mediaStream = null;
+let scriptProcessor = null;
+let nextPlayTime = 0;
+let activeBubble = null;
+let activeRole = null;
+let activeSources = [];
 
-        let activeBubble = null;
-        let activeRole = null;
-        let activeSources = [];
+// Visualizer Nodes (read continuously by the canvas draw loop below)
+let micAnalyser = null;
+let aiAnalyser = null;
+let vizState = 'idle'; // 'idle' | 'listening' | 'speaking'
 
-        // Visualizer Nodes
-        let micAnalyser = null;
-        let aiAnalyser = null;
-        let visualizerId = null;
+// ===== AI Personality System =====
+// Personalities are fetched from the Flask backend (personalities.py is the
+// single source of truth) so nothing is hardcoded here. A small local
+// fallback covers the case where api_server.py hasn't started yet.
+const FALLBACK_PERSONALITIES = {
+  friendly: { key: "friendly", display_name: "Friendly Assistant", prompt: "Personality: Friendly Assistant. Be warm, conversational, and use simple language.", confirmation: "Friendly mode activated! I'm here to help, just ask away.", triggers: ["switch to friendly mode", "switch to friendly", "use friendly mode", "be friendly", "friendly mode"] }
+};
 
-        UI.startBtn.addEventListener('click', () => {
-            const key = UI.apiKeyInput.value.trim();
-            if (!key) return alert("API Key is required.");
+// Purely visual: maps each existing personality key to an accent theme.
+// Does not affect prompts, tools, or any Gemini-side behavior.
+const PERSONALITY_THEMES = {
+  friendly:      { primary: '#fbbf24', secondary: '#f59e0b', glow: 'rgba(251,191,36,0.45)',  icon: '😊', blob1: '#fbbf24', blob2: '#f97316' },
+  professional:  { primary: '#8b5cf6', secondary: '#6366f1', glow: 'rgba(139,92,246,0.45)',  icon: '💼', blob1: '#8b5cf6', blob2: '#6366f1' },
+  teacher:       { primary: '#2dd4bf', secondary: '#14b8a6', glow: 'rgba(45,212,191,0.45)',  icon: '📘', blob1: '#2dd4bf', blob2: '#0ea5e9' },
+  coding_mentor: { primary: '#f472b6', secondary: '#22d3ee', glow: 'rgba(244,114,182,0.45)', icon: '💻', blob1: '#f472b6', blob2: '#22d3ee' }
+};
+let currentTheme = PERSONALITY_THEMES.friendly;
 
-            UI.setupModal.classList.add('hidden');
-            updateStatus('Connecting...', 'speaking');
-            addMessage('Initializing connection to Gemini...', 'system-msg');
+let personalities = {};                  // key -> personality object, populated by loadPersonalities()
+let currentPersonalityKey = 'friendly';   // active personality, persisted in localStorage
+let userTurnBuffer = '';                  // accumulates the user's current spoken utterance for trigger matching
+let setupAcked = false;                   // true once Gemini has confirmed session setup on the current ws
 
-            const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${key}`;
-            ws = new WebSocket(wsUrl);
+/**
+ * Applies a personality's accent theme (colors only) via CSS custom
+ * properties, so the ambient blobs, visualizer, glow, and active tab all
+ * morph smoothly together. Purely cosmetic — no effect on prompts/tools.
+ */
+function applyTheme(key) {
+  const theme = PERSONALITY_THEMES[key] || PERSONALITY_THEMES.friendly;
+  currentTheme = theme;
+  const root = document.documentElement;
+  root.style.setProperty('--theme-primary', theme.primary);
+  root.style.setProperty('--theme-secondary', theme.secondary);
+  root.style.setProperty('--theme-glow', theme.glow);
+  root.style.setProperty('--blob-1', theme.blob1);
+  root.style.setProperty('--blob-2', theme.blob2);
+}
 
-            ws.onopen = () => {
-                updateStatus('Ready', 'muted');
-                addMessage('System ready. Tap the mic to call.', 'system-msg');
+/** Renders the personality switcher tabs from the loaded personalities list. */
+function renderPersonalityTabs() {
+  UI.personalityTabs.innerHTML = '';
+  Object.values(personalities).forEach(p => {
+    const theme = PERSONALITY_THEMES[p.key] || PERSONALITY_THEMES.friendly;
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (p.key === currentPersonalityKey ? ' active' : '');
+    btn.dataset.key = p.key;
+    btn.innerHTML = `<span>${theme.icon}</span><span>${p.display_name}</span>`;
+    btn.addEventListener('click', () => switchPersonality(p.key));
+    UI.personalityTabs.appendChild(btn);
+  });
+}
 
-                // 🧠 CONTEXT INJECTION: Give Gemini the exact date and timezone
-                const currentDate = new Date().toString();
-                const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                const systemPrompt = `You are a professional, helpful booking assistant. 
-                CRITICAL CONTEXT: The current date and time is ${currentDate}. The user is in the ${timeZone} timezone. 
-                Always check availability first before booking a meeting to prevent double-booking. When booking or checking, format dates strictly to ISO 8601 offset to the user's timezone.`;
+function setActiveTab(key) {
+  UI.personalityTabs.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.key === key);
+  });
+}
 
-                ws.send(JSON.stringify({
-                    setup: {
-                        model: "models/gemini-3.1-flash-live-preview",
-                        generationConfig: {
-                            responseModalities: ["AUDIO"],
-                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } } }
-                        },
-                        systemInstruction: { parts: [{ text: systemPrompt }] },
-                        tools: [{
-                            functionDeclarations: [
-                                {
-                                    name: "check_availability",
-                                    description: "Checks the user's calendar for busy slots on a given day.",
-                                    parameters: {
-                                        type: "OBJECT",
-                                        properties: {
-                                            date: { type: "STRING", description: "ISO 8601 date to check (e.g., 2026-05-26T00:00:00+05:30)" }
-                                        },
-                                        required: ["date"]
-                                    }
-                                },
-                                {
-                                    name: "book_meeting",
-                                    description: "Schedules a meeting on the calendar.",
-                                    parameters: {
-                                        type: "OBJECT",
-                                        properties: {
-                                            title: { type: "STRING", description: "Meeting title" },
-                                            date_time: { type: "STRING", description: "ISO 8601 date and time (e.g., 2026-05-26T09:00:00+05:30)" },
-                                            guest_email: { type: "STRING", description: "Guest email address" }
-                                        },
-                                        required: ["title", "date_time", "guest_email"]
-                                    }
-                                }
-                            ]
-                        }]
-                    }
-                }));
-            };
+/**
+ * Loads personalities from the backend, renders the tab switcher, and
+ * restores the last-used personality from localStorage (default: friendly).
+ */
+async function loadPersonalities() {
+  try {
+    const res = await fetch('/api/personalities');
+    const data = await res.json();
+    personalities = {};
+    data.personalities.forEach(p => { personalities[p.key] = p; });
 
-            ws.onmessage = async (event) => {
-                const msg = JSON.parse(await event.data.text ? await event.data.text() : event.data);
+    const saved = localStorage.getItem('novavoice_personality');
+    currentPersonalityKey = (saved && personalities[saved]) ? saved : (data.default || 'friendly');
+  } catch (err) {
+    console.warn("Could not reach api_server.py for personalities yet, using fallback:", err);
+    personalities = FALLBACK_PERSONALITIES;
+    currentPersonalityKey = 'friendly';
+  }
 
-                if (msg.toolCall) {
-                    const functionCalls = msg.toolCall.functionCalls;
-                    const responses = [];
+  renderPersonalityTabs();
+  applyTheme(currentPersonalityKey);
+}
 
-                    for (const call of functionCalls) {
-                        const args = call.args;
-                        console.log("🎯 Tool Triggered:", call.name, args);
+/**
+ * Builds the full system prompt for a new Gemini Live session by combining
+ * the assistant's core capabilities (calendar) with the currently selected
+ * personality's behavior instructions.
+ */
+function buildSystemPrompt() {
+  const currentDate = new Date().toString();
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const personality = personalities[currentPersonalityKey] || { prompt: '' };
 
-                        let endpoint = "";
-                        let visualOutput = "";
+  return `You are NovaVoice, a helpful voice assistant with calendar tools.
+CRITICAL CONTEXT: The current date and time is ${currentDate}. The user is in the ${timeZone} timezone.
+Always check availability first before booking a meeting to prevent double-booking. When booking or checking, format dates strictly to ISO 8601 offset to the user's timezone.
 
-                        // Handle logic for both tools dynamically
-                        if (call.name === "book_meeting") {
-                            endpoint = "http://127.0.0.1:5000/api/book_meeting";
-                            visualOutput = `⚙️ Action: book_meeting()\n↳ Title: ${args.title}\n↳ Time: ${args.date_time}`;
-                        } else if (call.name === "check_availability") {
-                            endpoint = "http://127.0.0.1:5000/api/check_availability";
-                            visualOutput = `🔍 Action: check_availability()\n↳ Date: ${args.date}`;
-                        }
+${personality.prompt}`;
+}
 
-                        addToolCard(visualOutput);
+/**
+ * Opens (or re-opens) the Gemini Live WebSocket session using the currently
+ * selected personality's prompt. Reused both for the initial "Connect to
+ * Agent" click and for reconnecting after a personality switch, so the
+ * setup/tool-declaration logic exists in exactly one place.
+ *
+ * @param {boolean} isSwitch - true when this connection replaces a live one
+ *   because the personality changed; triggers a short spoken confirmation
+ *   once the new session is ready.
+ */
+function connectSession(isSwitch) {
+  setupAcked = false;
+  updateStatus('Connecting...', 'speaking');
+  if (!isSwitch) {
+    addMessage('Initializing connection to Gemini...', 'system-msg');
+  }
 
-                        try {
-                            const res = await fetch(endpoint, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(args)
-                            });
-                            const data = await res.json();
-                            responses.push({ id: call.id, name: call.name, response: { output: data.result } });
-                        } catch (error) {
-                            console.error("Backend Error:", error);
-                            responses.push({ id: call.id, name: call.name, response: { output: "Error connected to local Python API." } });
-                        }
-                    }
+  // Connect through our own server's /ws/gemini relay — the Gemini API key
+  // lives server-side only (server.py), never in this browser code.
+  const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProtocol}//${location.host}/ws/gemini`;
+  ws = new WebSocket(wsUrl);
 
-                    ws.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
-                }
+  ws.onopen = () => {
+    updateStatus(isCallActive ? 'Listening...' : 'Ready', isCallActive ? 'live' : 'muted');
+    if (!isSwitch) {
+      addMessage('System ready. Tap the mic to call.', 'system-msg');
+    }
 
-                if (msg.serverContent) {
-                    const content = msg.serverContent;
+    const systemPrompt = buildSystemPrompt();
 
-                    if (content.interrupted) {
-                        setSpeakingState(false);
-                        nextPlayTime = audioContext ? audioContext.currentTime : 0;
-                        activeBubble = null;
-                        activeSources.forEach(source => { try { source.stop(); } catch (e) { } });
-                        activeSources = [];
-                    }
-
-                    if (content.inputTranscription && content.inputTranscription.text) {
-                        addMessage(content.inputTranscription.text + " ", 'user-msg', true);
-                    }
-
-                    if (content.outputTranscription && content.outputTranscription.text) {
-                        setSpeakingState(true);
-                        addMessage(content.outputTranscription.text, 'ai-msg', true);
-                    }
-
-                    if (content.modelTurn) {
-                        for (const part of content.modelTurn.parts) {
-                            if (part.inlineData) {
-                                playAudioBase64(part.inlineData.data);
-                            }
-                        }
-                    }
-
-                    if (content.turnComplete) {
-                        setSpeakingState(false);
-                        activeBubble = null;
-                    }
-                }
-            };
-        });
-
-        UI.callBtn.addEventListener('click', async () => {
-            isCallActive = !isCallActive;
-
-            if (isCallActive) {
-                UI.callBtn.classList.add('active');
-                UI.callBtn.innerHTML = '⏹️';
-                updateStatus('Listening...', 'live');
-                addMessage('Microphone active. Say hello!', 'system-msg');
-
-                try {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                    nextPlayTime = audioContext.currentTime;
-
-                    // Setup Visualizers
-                    micAnalyser = audioContext.createAnalyser();
-                    aiAnalyser = audioContext.createAnalyser();
-                    micAnalyser.fftSize = 256;
-                    aiAnalyser.fftSize = 256;
-                    startVisualizer();
-
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        audio: { echoCancellation: true, noiseSuppression: true }
-                    });
-
-                    const source = audioContext.createMediaStreamSource(mediaStream);
-                    source.connect(micAnalyser); // Connect Mic to Analyser
-
-                    scriptProcessor = audioContext.createScriptProcessor(1024, 1, 1);
-                    scriptProcessor.onaudioprocess = (e) => {
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            const float32Data = e.inputBuffer.getChannelData(0);
-                            ws.send(JSON.stringify({
-                                realtimeInput: {
-                                    audio: { mimeType: "audio/pcm;rate=16000", data: float32ToBase64(float32Data) }
-                                }
-                            }));
-                        }
-                    };
-
-                    source.connect(scriptProcessor);
-                    scriptProcessor.connect(audioContext.destination);
-
-                } catch (err) {
-                    isCallActive = false;
-                    UI.callBtn.classList.remove('active');
-                    UI.callBtn.innerHTML = '🎙️';
-                    updateStatus('Ready', 'muted');
-                }
-            } else {
-                UI.callBtn.classList.remove('active');
-                UI.callBtn.innerHTML = '🎙️';
-                UI.orbContainer.classList.remove('speaking-mode');
-                updateStatus('Call Ended', 'muted');
-
-                if (visualizerId) cancelAnimationFrame(visualizerId);
-                UI.callBtn.style.setProperty('--mic-scale', '1');
-                UI.orbContainer.style.setProperty('--ai-scale', '1');
-
-                if (scriptProcessor) scriptProcessor.disconnect();
-                if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-                if (audioContext) audioContext.close();
+    ws.send(JSON.stringify({
+      setup: {
+        model: "models/gemini-3.1-flash-live-preview",
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } } }
+        },
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        tools: [{
+          functionDeclarations: [
+            {
+              name: "check_availability",
+              description: "Checks the user's calendar for busy slots on a given day.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  date: { type: "STRING", description: "ISO 8601 date to check (e.g., 2026-05-26T00:00:00+05:30)" }
+                },
+                required: ["date"]
+              }
+            },
+            {
+              name: "book_meeting",
+              description: "Schedules a meeting on the calendar.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  title: { type: "STRING", description: "Meeting title" },
+                  date_time: { type: "STRING", description: "ISO 8601 date and time (e.g., 2026-05-26T09:00:00+05:30)" },
+                  guest_email: { type: "STRING", description: "Guest email address" }
+                },
+                required: ["title", "date_time", "guest_email"]
+              }
             }
-        });
+          ]
+        }]
+      }
+    }));
+  };
 
-        // 🎵 VISUALIZER ENGINE
-        function startVisualizer() {
-            const micData = new Uint8Array(micAnalyser.frequencyBinCount);
-            const aiData = new Uint8Array(aiAnalyser.frequencyBinCount);
+  ws.onmessage = async (event) => {
+    const msg = JSON.parse(await event.data.text ? await event.data.text() : event.data);
 
-            function render() {
-                if (!isCallActive) return;
+    // Gemini acknowledges the setup message before it will accept further
+    // content. Once acked, if this connection exists because of a
+    // personality switch, ask it to speak a short confirmation line.
+    if (msg.setupComplete) {
+      setupAcked = true;
+      if (isSwitch) {
+        const p = personalities[currentPersonalityKey];
+        ws.send(JSON.stringify({
+          clientContent: {
+            turns: [{
+              role: "user",
+              parts: [{ text: `(The user just switched personality mode. Briefly confirm in one short sentence, close in spirit to: "${p.confirmation}" — then continue normally.)` }]
+            }],
+            turnComplete: true
+          }
+        }));
+      }
+    }
 
-                micAnalyser.getByteFrequencyData(micData);
-                aiAnalyser.getByteFrequencyData(aiData);
+    if (msg.toolCall) {
+      const functionCalls = msg.toolCall.functionCalls;
+      const responses = [];
 
-                // Calculate average volume
-                const micVol = micData.reduce((a, b) => a + b, 0) / micData.length;
-                const aiVol = aiData.reduce((a, b) => a + b, 0) / aiData.length;
+      for (const call of functionCalls) {
+        const args = call.args;
+        console.log("🎯 Tool Triggered:", call.name, args);
 
-                // Map volume (0-255) to scale factor (1.0 to 1.3)
-                const micScale = 1 + (micVol / 255) * 0.15;
-                const aiScale = 1 + (aiVol / 255) * 0.8;
+        let endpoint = "";
+        let visualOutput = "";
 
-                UI.callBtn.style.setProperty('--mic-scale', micScale);
-                UI.orbContainer.style.setProperty('--ai-scale', aiScale);
+        // Handle logic for both tools dynamically
+        if (call.name === "book_meeting") {
+          endpoint = "/api/book_meeting";
+          visualOutput = `⚙️ Action: book_meeting()\n↳ Title: ${args.title}\n↳ Time: ${args.date_time}`;
+        } else if (call.name === "check_availability") {
+          endpoint = "/api/check_availability";
+          visualOutput = `🔍 Action: check_availability()\n↳ Date: ${args.date}`;
+        }
 
-                visualizerId = requestAnimationFrame(render);
+        addToolCard(visualOutput);
+
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(args)
+          });
+          const data = await res.json();
+          responses.push({ id: call.id, name: call.name, response: { output: data.result } });
+        } catch (error) {
+          console.error("Backend Error:", error);
+          responses.push({ id: call.id, name: call.name, response: { output: "Error connected to local Python API." } });
+        }
+      }
+
+      ws.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+    }
+
+    if (msg.serverContent) {
+      const content = msg.serverContent;
+
+      if (content.interrupted) {
+        setSpeakingState(false);
+        nextPlayTime = audioContext ? audioContext.currentTime : 0;
+        activeBubble = null;
+        activeSources.forEach(source => { try { source.stop(); } catch (e) { } });
+        activeSources = [];
+      }
+
+      if (content.inputTranscription && content.inputTranscription.text) {
+        const chunkText = content.inputTranscription.text;
+
+        // Starting a fresh user utterance resets the trigger-matching buffer
+        if (!(activeBubble && activeRole === 'user-msg')) {
+          userTurnBuffer = '';
+        }
+        userTurnBuffer += chunkText;
+
+        addMessage(chunkText + " ", 'user-msg', true);
+        maybeHandlePersonalitySwitch(userTurnBuffer);
+      }
+
+      if (content.outputTranscription && content.outputTranscription.text) {
+        setSpeakingState(true);
+        addMessage(content.outputTranscription.text, 'ai-msg', true);
+      }
+
+      if (content.modelTurn) {
+        for (const part of content.modelTurn.parts) {
+          if (part.inlineData) {
+            playAudioBase64(part.inlineData.data);
+          }
+        }
+      }
+
+      if (content.turnComplete) {
+        setSpeakingState(false);
+        activeBubble = null;
+      }
+    }
+  };
+}
+
+/**
+ * Checks the user's latest (in-progress) spoken utterance against every
+ * personality's trigger phrases. On a match to a *different* personality
+ * than the current one, switches immediately.
+ */
+function maybeHandlePersonalitySwitch(spokenTextSoFar) {
+  const lower = spokenTextSoFar.toLowerCase();
+  for (const key of Object.keys(personalities)) {
+    if (key === currentPersonalityKey) continue;
+    const triggers = personalities[key].triggers || [];
+    if (triggers.some(phrase => lower.includes(phrase))) {
+      userTurnBuffer = ''; // prevent immediately re-matching on the next chunk
+      switchPersonality(key);
+      return;
+    }
+  }
+}
+
+/**
+ * Activates a personality: updates state + UI (tab + theme) + persistence,
+ * and if a call is currently live, seamlessly reconnects the Gemini session
+ * so the new behavior takes effect immediately (mic and speaker stay
+ * connected throughout).
+ */
+function switchPersonality(key) {
+  if (!personalities[key] || key === currentPersonalityKey) return;
+
+  currentPersonalityKey = key;
+  localStorage.setItem('novavoice_personality', key);
+  setActiveTab(key);
+  applyTheme(key);
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    addMessage(`🎭 Switching to ${personalities[key].display_name}...`, 'system-msg');
+    try { ws.close(); } catch (e) { /* ignore */ }
+    connectSession(true);
+  }
+}
+
+UI.startBtn.addEventListener('click', () => {
+  UI.setupModal.classList.add('hidden');
+  connectSession(false);
+});
+
+loadPersonalities();
+
+UI.callBtn.addEventListener('click', async () => {
+  isCallActive = !isCallActive;
+
+  if (isCallActive) {
+    UI.callBtn.classList.add('active');
+    UI.callBtn.innerHTML = '⏹️';
+    updateStatus('Listening...', 'live');
+    addMessage('Microphone active. Say hello!', 'system-msg');
+
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      nextPlayTime = audioContext.currentTime;
+
+      // Analyser nodes are read every frame by the canvas visualizer loop below
+      micAnalyser = audioContext.createAnalyser();
+      aiAnalyser = audioContext.createAnalyser();
+      micAnalyser.fftSize = 256;
+      aiAnalyser.fftSize = 256;
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      source.connect(micAnalyser); // Connect Mic to Analyser
+
+      scriptProcessor = audioContext.createScriptProcessor(1024, 1, 1);
+      scriptProcessor.onaudioprocess = (e) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          const float32Data = e.inputBuffer.getChannelData(0);
+          ws.send(JSON.stringify({
+            realtimeInput: {
+              audio: { mimeType: "audio/pcm;rate=16000", data: float32ToBase64(float32Data) }
             }
-            render();
+          }));
         }
+      };
 
-        function float32ToBase64(float32Array) {
-            let buffer = new ArrayBuffer(float32Array.length * 2);
-            let view = new DataView(buffer);
-            for (let i = 0; i < float32Array.length; i++) {
-                let s = Math.max(-1, Math.min(1, float32Array[i]));
-                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-            }
-            let binary = '';
-            let bytes = new Uint8Array(buffer);
-            for (let i = 0; i < bytes.byteLength; i++) { binary += String.fromCharCode(bytes[i]); }
-            return btoa(binary);
-        }
+      source.connect(scriptProcessor);
+      scriptProcessor.connect(audioContext.destination);
 
-        function playAudioBase64(base64) {
-            if (!audioContext) return;
+    } catch (err) {
+      isCallActive = false;
+      UI.callBtn.classList.remove('active');
+      UI.callBtn.innerHTML = '🎙️';
+      updateStatus('Ready', 'muted');
+    }
 
-            let binary = atob(base64);
-            let buffer = new ArrayBuffer(binary.length);
-            let view = new DataView(buffer);
-            for (let i = 0; i < binary.length; i++) { view.setUint8(i, binary.charCodeAt(i)); }
+  } else {
+    UI.callBtn.classList.remove('active');
+    UI.callBtn.innerHTML = '🎙️';
+    updateStatus('Call Ended', 'muted');
 
-            const int16Array = new Int16Array(buffer);
-            const audioBuffer = audioContext.createBuffer(1, int16Array.length, 24000);
-            const channelData = audioBuffer.getChannelData(0);
+    if (scriptProcessor) scriptProcessor.disconnect();
+    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    if (audioContext) audioContext.close();
+  }
+});
 
-            for (let i = 0; i < int16Array.length; i++) { channelData[i] = int16Array[i] / 32768.0; }
+function float32ToBase64(float32Array) {
+  let buffer = new ArrayBuffer(float32Array.length * 2);
+  let view = new DataView(buffer);
+  for (let i = 0; i < float32Array.length; i++) {
+    let s = Math.max(-1, Math.min(1, float32Array[i]));
+    view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  let binary = '';
+  let bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) { binary += String.fromCharCode(bytes[i]); }
+  return btoa(binary);
+}
 
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
+function playAudioBase64(base64) {
+  if (!audioContext) return;
+  let binary = atob(base64);
+  let buffer = new ArrayBuffer(binary.length);
+  let view = new DataView(buffer);
+  for (let i = 0; i < binary.length; i++) { view.setUint8(i, binary.charCodeAt(i)); }
 
-            // Connect AI audio to our Visualizer Analyser Node
-            source.connect(aiAnalyser);
-            aiAnalyser.connect(audioContext.destination);
+  const int16Array = new Int16Array(buffer);
+  const audioBuffer = audioContext.createBuffer(1, int16Array.length, 24000);
+  const channelData = audioBuffer.getChannelData(0);
+  for (let i = 0; i < int16Array.length; i++) { channelData[i] = int16Array[i] / 32768.0; }
 
-            const startTime = Math.max(audioContext.currentTime, nextPlayTime);
-            source.start(startTime);
-            nextPlayTime = startTime + audioBuffer.duration;
+  const source = audioContext.createBufferSource();
+  source.buffer = audioBuffer;
 
-            activeSources.push(source);
-            source.onended = () => { activeSources = activeSources.filter(s => s !== source); };
-        }
+  // Connect AI audio to our visualizer analyser node
+  source.connect(aiAnalyser);
+  aiAnalyser.connect(audioContext.destination);
 
-        function updateStatus(text, dotClass) {
-            UI.statusText.innerText = text; UI.statusDot.className = `dot ${dotClass}`;
-        }
-        function addToolCard(text) {
-            const card = document.createElement('pre'); card.className = 'tool-card'; card.innerText = text;
-            UI.transcript.appendChild(card); UI.transcript.scrollTop = UI.transcript.scrollHeight;
-            activeBubble = null; activeRole = null;
-        }
-        function setSpeakingState(isSpeaking) {
-            if (isSpeaking) {
-                UI.orbContainer.classList.add('speaking-mode'); updateStatus('Agent Speaking...', 'speaking');
-            } else {
-                UI.orbContainer.classList.remove('speaking-mode'); if (isCallActive) updateStatus('Listening...', 'live');
-            }
-        }
-        function addMessage(text, typeClass, isChunk = false) {
-            if (isChunk) {
-                if (activeBubble && activeRole === typeClass) {
-                    activeBubble.innerText += text; UI.transcript.scrollTop = UI.transcript.scrollHeight; return;
-                }
-                activeBubble = document.createElement('div'); activeBubble.className = `message ${typeClass}`; activeBubble.innerText = text;
-                UI.transcript.appendChild(activeBubble); activeRole = typeClass;
-            } else {
-                const msg = document.createElement('div'); msg.className = `message ${typeClass}`; msg.innerText = text;
-                UI.transcript.appendChild(msg); activeBubble = null; activeRole = null;
-            }
-            UI.transcript.scrollTop = UI.transcript.scrollHeight;
-        }
-    </script>
+  const startTime = Math.max(audioContext.currentTime, nextPlayTime);
+  source.start(startTime);
+  nextPlayTime = startTime + audioBuffer.duration;
+  activeSources.push(source);
+  source.onended = () => { activeSources = activeSources.filter(s => s !== source); };
+}
+
+function updateStatus(text, dotClass) {
+  UI.statusText.innerText = text;
+  UI.statusDot.className = `dot ${dotClass}`;
+  if (text.includes('Listening')) vizState = 'listening';
+  else if (text.includes('Speaking')) vizState = 'speaking';
+  else vizState = 'idle';
+}
+
+function setSpeakingState(isSpeaking) {
+  if (isSpeaking) {
+    updateStatus('Agent Speaking...', 'speaking');
+  } else if (isCallActive) {
+    updateStatus('Listening...', 'live');
+  } else {
+    updateStatus('Ready', 'muted');
+  }
+}
+
+function nowTime() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function addToolCard(text) {
+  const card = document.createElement('div');
+  card.className = 'tool-card msg-in';
+  card.innerHTML = `<pre class="tool-text"></pre><span class="msg-time">${nowTime()}</span>`;
+  card.querySelector('.tool-text').innerText = text;
+  UI.transcript.appendChild(card);
+  UI.transcript.scrollTop = UI.transcript.scrollHeight;
+  activeBubble = null; activeRole = null;
+}
+
+function addMessage(text, typeClass, isChunk = false) {
+  if (isChunk) {
+    if (activeBubble && activeRole === typeClass) {
+      activeBubble.querySelector('.msg-text').innerText += text;
+      UI.transcript.scrollTop = UI.transcript.scrollHeight;
+      return;
+    }
+    activeBubble = document.createElement('div');
+    activeBubble.className = `message ${typeClass} msg-in`;
+    activeBubble.innerHTML = `<span class="msg-text"></span><span class="msg-time">${nowTime()}</span>`;
+    activeBubble.querySelector('.msg-text').innerText = text;
+    UI.transcript.appendChild(activeBubble);
+    activeRole = typeClass;
+  } else {
+    const msg = document.createElement('div');
+    msg.className = `message ${typeClass} msg-in`;
+    msg.innerHTML = `<span class="msg-text"></span><span class="msg-time">${nowTime()}</span>`;
+    msg.querySelector('.msg-text').innerText = text;
+    UI.transcript.appendChild(msg);
+    activeBubble = null; activeRole = null;
+  }
+  UI.transcript.scrollTop = UI.transcript.scrollHeight;
+}
+
+// ===== Canvas radial visualizer =====
+// Runs continuously from page load (gentle idle "breathing" animation),
+// and reacts to real mic/AI frequency data once a call is live. Purely
+// presentational — reads micAnalyser/aiAnalyser but never affects them.
+const canvas = document.getElementById('visualizerCanvas');
+const vizCtx = canvas.getContext('2d');
+let dpr = window.devicePixelRatio || 1;
+let micData = null;
+let aiData = null;
+let breathePhase = 0;
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function drawVisualizer() {
+  requestAnimationFrame(drawVisualizer);
+  if (!canvas.width || !canvas.height) return;
+
+  const w = canvas.width, h = canvas.height;
+  vizCtx.clearRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2;
+  const baseRadius = Math.min(w, h) * 0.18;
+  const theme = currentTheme;
+  const barCount = 72;
+
+  let dataArr = null;
+  if (vizState === 'listening' && micAnalyser) {
+    micData = micData || new Uint8Array(micAnalyser.frequencyBinCount);
+    micAnalyser.getByteFrequencyData(micData);
+    dataArr = micData;
+  } else if (vizState === 'speaking' && aiAnalyser) {
+    aiData = aiData || new Uint8Array(aiAnalyser.frequencyBinCount);
+    aiAnalyser.getByteFrequencyData(aiData);
+    dataArr = aiData;
+  }
+
+  breathePhase += 0.02;
+
+  // Ambient glow core
+  const coreGrad = vizCtx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius * 1.7);
+  coreGrad.addColorStop(0, theme.primary + '99');
+  coreGrad.addColorStop(1, theme.primary + '00');
+  vizCtx.fillStyle = coreGrad;
+  vizCtx.beginPath();
+  vizCtx.arc(cx, cy, baseRadius * 1.7, 0, Math.PI * 2);
+  vizCtx.fill();
+
+  // Center disc (gently breathes when idle)
+  const centerPulse = dataArr ? 1 : 1 + Math.sin(breathePhase) * 0.035;
+  vizCtx.beginPath();
+  vizCtx.fillStyle = theme.secondary;
+  vizCtx.arc(cx, cy, baseRadius * 0.55 * centerPulse, 0, Math.PI * 2);
+  vizCtx.fill();
+
+  // Radial bars
+  for (let i = 0; i < barCount; i++) {
+    const angle = (i / barCount) * Math.PI * 2;
+    let amp;
+    if (dataArr) {
+      const bin = dataArr[Math.floor((i / barCount) * dataArr.length)];
+      amp = bin / 255;
+    } else {
+      amp = 0.08 + Math.sin(breathePhase + i * 0.3) * 0.04;
+    }
+    const reach = vizState === 'speaking' ? 1.4 : 0.9;
+    const barLen = baseRadius * (0.32 + amp * reach);
+    const innerR = baseRadius * 0.62;
+
+    const x1 = cx + Math.cos(angle) * innerR;
+    const y1 = cy + Math.sin(angle) * innerR;
+    const x2 = cx + Math.cos(angle) * (innerR + barLen);
+    const y2 = cy + Math.sin(angle) * (innerR + barLen);
+
+    vizCtx.strokeStyle = theme.primary;
+    vizCtx.lineWidth = Math.max(2, baseRadius * 0.045);
+    vizCtx.lineCap = 'round';
+    vizCtx.globalAlpha = 0.5 + amp * 0.5;
+    vizCtx.beginPath();
+    vizCtx.moveTo(x1, y1);
+    vizCtx.lineTo(x2, y2);
+    vizCtx.stroke();
+  }
+  vizCtx.globalAlpha = 1;
+}
+drawVisualizer();
+</script>
 </body>
-
 </html>
